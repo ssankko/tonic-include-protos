@@ -1,0 +1,12 @@
+[package]
+name = "tonic_include_protos"
+version = "0.1.0"
+authors = ["ssankko <literaamr@gmail.com>"]
+edition = "2018"
+license = "MIT"
+
+[lib]
+name = "tonic_include_protos"
+proc-macro = true
+
+[dependencies]
