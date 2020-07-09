@@ -68,7 +68,7 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
     let out_dir = std::env::var("TIP_OUT_DIR")
         .or(std::env::var("OUT_DIR"))
         .unwrap();
-    let files = std::fs::read_dir(out_dir).unwrap();
+    let files = std::fs::read_dir(&out_dir).unwrap();
     // extract file names from output directory
     let file_names = files
         // prost constructs file names based on a grpc package name, which
@@ -101,18 +101,15 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
 
     // simple recursive function to construct mod tree based on a
     // tree built earlier
-    fn construct(tree_entry: Box<TreeEntry>, result: &mut String) {
+    fn construct(tree_entry: Box<TreeEntry>, result: &mut String, out_dir: &str) {
         match *tree_entry {
             TreeEntry::Node(node) => {
-                result.push_str(&format!(
-                    r#"include!(concat!(env!("OUT_DIR"), "/{}"));"#,
-                    node
-                ));
+                result.push_str(&format!(r#"include!("{}/{}");"#, out_dir, node));
             }
             TreeEntry::Branch(branch) => {
                 for (name, child) in branch {
                     result.push_str(&format!("pub mod {} {{", name));
-                    construct(child, result);
+                    construct(child, result, out_dir);
                     result.push_str("}");
                 }
             }
@@ -120,6 +117,6 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
     };
 
     let mut result = String::new();
-    construct(Box::new(tree), &mut result);
+    construct(Box::new(tree), &mut result, &out_dir);
     result.parse().unwrap()
 }
