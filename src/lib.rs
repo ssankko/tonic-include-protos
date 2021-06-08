@@ -41,7 +41,7 @@ struct ModuleStructure {
 #[proc_macro]
 pub fn include_protos(_item: TokenStream) -> TokenStream {
     let out_dir = std::env::var("TIP_OUT_DIR")
-        .or(std::env::var("OUT_DIR"))
+        .or_else(|_| std::env::var("OUT_DIR"))
         .unwrap();
     let files = std::fs::read_dir(&out_dir).unwrap();
     // extract file names from output directory
@@ -78,21 +78,21 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
 
     // simple recursive function to construct mod tree based on a
     // tree built earlier
-    fn construct(tree_entry: Box<ModuleStructure>, out_dir: &str) -> String {
+    fn construct(tree_entry: &ModuleStructure, out_dir: &str) -> String {
         format!(
             "{}{}",
-            if let Some(i) = tree_entry.mod_file {
+            if let Some(i) = &tree_entry.mod_file {
                 format!(r#"include!("{}/{}");"#, out_dir, i)
             } else {
                 String::new()
             },
             tree_entry
                 .children_modules
-                .into_iter()
-                .map(|x| format!("pub mod {} {{ {} }}", x.0, construct(x.1, out_dir)))
+                .iter()
+                .map(|x| format!("pub mod {} {{ {} }}", x.0, construct(&x.1, out_dir)))
                 .collect::<String>()
         )
     }
 
-    construct(Box::new(tree), &out_dir).parse().unwrap()
+    construct(&tree, &out_dir).parse().unwrap()
 }
