@@ -114,7 +114,7 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
                 }
             }
         }
-    };
+    }
 
     let mut result = String::new();
     construct(Box::new(tree), &mut result, &out_dir);
