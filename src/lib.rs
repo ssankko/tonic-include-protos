@@ -2,35 +2,10 @@ extern crate proc_macro;
 use proc_macro::TokenStream;
 use std::collections::HashMap;
 
-#[derive(Debug)]
-enum TreeEntry {
-    Node(String),
-    Branch(HashMap<String, Box<TreeEntry>>),
-}
-
-impl TreeEntry {
-    fn get_mut(&mut self, part: &str) -> Option<&mut Box<TreeEntry>> {
-        match self {
-            TreeEntry::Branch(tree) => tree.get_mut(part),
-            _ => panic!(),
-        }
-    }
-
-    fn get(&mut self, part: &str) -> Option<&Box<TreeEntry>> {
-        match self {
-            TreeEntry::Branch(tree) => tree.get(part),
-            _ => panic!(),
-        }
-    }
-
-    fn insert(&mut self, part: String, node: TreeEntry) {
-        match self {
-            TreeEntry::Branch(tree) => {
-                tree.insert(part, Box::new(node));
-            }
-            _ => panic!(),
-        }
-    }
+#[derive(Default, Debug)]
+struct ModuleStructure {
+    pub mod_file: Option<String>,
+    pub children_modules: HashMap<String, Box<ModuleStructure>>,
 }
 
 /// Include all generated proto server and client items.
@@ -66,7 +41,7 @@ impl TreeEntry {
 #[proc_macro]
 pub fn include_protos(_item: TokenStream) -> TokenStream {
     let out_dir = std::env::var("TIP_OUT_DIR")
-        .or(std::env::var("OUT_DIR"))
+        .or_else(|_| std::env::var("OUT_DIR"))
         .unwrap();
     let files = std::fs::read_dir(&out_dir).unwrap();
     // extract file names from output directory
@@ -78,7 +53,7 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
     // --------
     // traverse all files and construct tree-like structure of namespaces
     // --------
-    let mut tree = TreeEntry::Branch(Default::default());
+    let mut tree = ModuleStructure::default();
     for file_name in file_names {
         let mut current_branch = &mut tree;
         // split names by dot.
@@ -87,36 +62,37 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
         // [google, logging, v2, rs]
         for part in file_name.split('.') {
             if part == "rs" {
-                *current_branch = TreeEntry::Node(file_name.to_string());
+                current_branch.mod_file = Some(file_name.to_owned());
                 continue;
             }
 
-            if let None = current_branch.get(part) {
-                current_branch.insert(part.to_owned(), TreeEntry::Branch(Default::default()));
+            if current_branch.children_modules.get(part).is_none() {
+                current_branch
+                    .children_modules
+                    .insert(part.to_owned(), Box::new(ModuleStructure::default()));
             }
-            current_branch = current_branch.get_mut(part).unwrap();
+            current_branch = current_branch.children_modules.get_mut(part).unwrap();
         }
     }
     // --------
 
     // simple recursive function to construct mod tree based on a
     // tree built earlier
-    fn construct(tree_entry: Box<TreeEntry>, result: &mut String, out_dir: &str) {
-        match *tree_entry {
-            TreeEntry::Node(node) => {
-                result.push_str(&format!(r#"include!("{}/{}");"#, out_dir, node));
-            }
-            TreeEntry::Branch(branch) => {
-                for (name, child) in branch {
-                    result.push_str(&format!("pub mod {} {{", name));
-                    construct(child, result, out_dir);
-                    result.push_str("}");
-                }
-            }
-        }
-    };
+    fn construct(tree_entry: &ModuleStructure, out_dir: &str) -> String {
+        format!(
+            "{}{}",
+            if let Some(i) = &tree_entry.mod_file {
+                format!(r#"include!("{}/{}");"#, out_dir, i)
+            } else {
+                String::new()
+            },
+            tree_entry
+                .children_modules
+                .iter()
+                .map(|x| format!("pub mod {} {{ {} }}", x.0, construct(&x.1, out_dir)))
+                .collect::<String>()
+        )
+    }
 
-    let mut result = String::new();
-    construct(Box::new(tree), &mut result, &out_dir);
-    result.parse().unwrap()
+    construct(&tree, &out_dir).parse().unwrap()
 }
