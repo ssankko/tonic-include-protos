@@ -82,7 +82,7 @@ pub fn include_protos(_item: TokenStream) -> TokenStream {
         format!(
             "{}{}",
             if let Some(i) = &tree_entry.mod_file {
-                format!(r#"include!("{}/{}");"#, out_dir, i)
+                format!(r#"include!(r"{}/{}");"#, out_dir, i)
             } else {
                 String::new()
             },
